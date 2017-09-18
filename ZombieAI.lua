@@ -210,7 +210,7 @@ function walkTo(a,PYS,zombieHumanoid) --PYS = Player Y Subtraction
 				zombieHumanoid.Jump = true
 				wait(.2)
 			end
-			if pathvis.Value then --PATH VISUALIZATION
+			if pathvis then --PATH VISUALIZATION
 				if pathd then
 					pathd:Destroy()
 				end
