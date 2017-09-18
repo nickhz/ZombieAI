@@ -113,12 +113,15 @@ end
 		-Health above 0 (=alive)
 	Also checks if the zombie.Parent ~= nil
 --]]
-function findNearestPlayer()
+function findNearestPlayer(zombie)
+	if zombie == nil then
+		zombie = script.Parent
+	end
 	local d = math.huge
 	local p
 	for i,v in pairs(game.Players:GetChildren()) do
 		if ((values and workspace:FindFirstChild(v.Name) and v:FindFirstChild("Alive") and v.Alive.Value) or not values) and v.Character and v.Character.Humanoid.Health > 0 and script.Parent and script.Parent.Parent then
-			local n = distance(v.Character,script.Parent)
+			local n = distance(v.Character,zombie)
 			if n and d and n < d then
 				d = n
 				p = v
@@ -163,7 +166,10 @@ nmc = 1 --NotMovingCount
 lasthrtpos = nil
 pathvis = false --if true, it places 1x1x1 parts at each Vector3 point of the path table to show the zombie's selected path (for testing)
 pathd = nil
-function walkTo(a,PYS) --PYS = Player Y Subtraction
+function walkTo(a,PYS,zombieHumanoid) --PYS = Player Y Subtraction
+	if zombieHumanoid == nil then
+		zombieHumanoid = humanoid
+	end
 	nmc = nmc + 1
 	if nmc == 15 then
 		lasthrtpos = noY(hrt.Position)
@@ -193,15 +199,15 @@ function walkTo(a,PYS) --PYS = Player Y Subtraction
 				if ptable[3] then
 					ptable[3] = ptable[3] - Vector3.new(0,ydif,0)
 				end
-				pcall(function() humanoid:MoveTo(ptable[3]) end)
+				pcall(function() zombieHumanoid:MoveTo(ptable[3]) end)
 				if math.abs(ydif) >= 3 and ptable[4] then
-					humanoid.Jump = true
-					pcall(function() humanoid:MoveTo(ptable[4]) end) --humanoid:MoveTo(Position) Makes the zombie walk to Position
+					zombieHumanoid.Jump = true
+					pcall(function() zombieHumanoid:MoveTo(ptable[4]) end) --zombieHumanoid:MoveTo(Position) Makes the zombie walk to Position
 				end
 			end
 			local hit = workspace:FindPartOnRayWithIgnoreList(Ray.new(hrt.CFrame.p,((hrt.CFrame * CFrame.new(0,0,-3)).p - hrt.CFrame.p).unit*3),{script.Parent,pathd}) --https://gyazo.com/5aea567040768a9bf5d82040bc7490ab
 			if hit then
-				humanoid.Jump = true
+				zombieHumanoid.Jump = true
 				wait(.2)
 			end
 			if pathvis.Value then --PATH VISUALIZATION
@@ -219,9 +225,9 @@ function walkTo(a,PYS) --PYS = Player Y Subtraction
 				end
 			end
 		else --is distance is less than 4 studs, move directly to target (no pathfinding)
-			humanoid:MoveTo(translate(a))
+			zombieHumanoid:MoveTo(translate(a))
 			if translate(a).Y >= hrt.Position.Y + 1 then
-				humanoid.Jump = true
+				zombieHumanoid.Jump = true
 				wait(.2)
 			end
 		end
@@ -229,12 +235,12 @@ function walkTo(a,PYS) --PYS = Player Y Subtraction
 			script.Parent.Head.Scream:Play()
 		end
 	else
-		--No pathfinding success, move directly towards target
 		if first then
 			respawn(true)
 			return
 		end
-		pcall(function() humanoid:MoveTo(translate(a)) end)
+		--No pathfinding success, move directly towards target
+		pcall(function() zombieHumanoid:MoveTo(translate(a)) end)
 		count = count + 1 --pathfinding fail: count++
 		if count >= 50 then
 			respawn() --too many fails in a row -> respawn
@@ -252,9 +258,12 @@ function getRandomChild(par)
 end
 
 --if all (mesh)parts of zombie == nil then self destruct
-function checkDes()
+function checkDes(zombie)
+	if zombie == nil then
+		zombie = script.Parent
+	end
 	local des = true
-	for i,v in pairs(script.Parent:GetChildren()) do
+	for i,v in pairs(zombie:GetChildren()) do
 		if v:IsA("MeshPart") or v:IsA("Part") then
 			des = false
 		end
@@ -290,3 +299,77 @@ while true do --endless loop until zombie is destroyed
 	if checkDes() then pcall(function() script.Parent:Destroy() end) break end
 	wait(.33)
 end
+
+--[[
+	MASTER SCRIPT EXAMPLE
+	Info: Roblox works with "Models", which are basically lua dictionaries with roblox objects inside
+	https://gyazo.com/5f7362be9cbeecc1e66b0f8aeb53421e --Example for a model in which all zombies would be. An identical lua dictionary would look like this:
+	workspace = {
+		Model = {
+			Zombie = {
+				Head = ...,
+				HumanoidRootPart = ...,
+				Humanoid = ...,
+			},
+			Zombie = {
+				Head = ...,
+				HumanoidRootPart = ...,
+				Humanoid = ...,
+			},
+			Zombie = {
+				Head = ...,
+				HumanoidRootPart = ...,
+				Humanoid = ...,
+			}
+		},
+		...
+	}
+	workspace.ZombieModel.Zombie will give you "Zombie" from "ZombieModel"
+
+VVV   Uncomment below to view lua colors   VVV
+
+
+ZombieModel = workspace.ZombieModel --Zombies Model, where all zombies are in
+ZombieClone = ZombieModel.Zombie:Clone() --clones a zombie out of Zombie model, which can be used to spawn new clones once the zombie dies
+while true do --endless loop
+	for i,Zombie in pairs(ZombieModel:GetChildren()) do
+		coroutine.wrap(function()
+			local ZombieHumanoid = Zombie.Humanoid
+			local ZombieHRT = Zombie.HumanoidRootPart
+			local function ZombieRespawn(RandPos)
+				Zombie:Destroy() --Destroy to-be-respawned zombie
+				local NewZombie = ZombieClone:Clone() --re-clone ZombieClone
+				NewZombie:MoveTo(Vector3.new(math.random(-50,50),50,math.random(-50,50))) --Move new zombie to random spawn point
+			end
+			
+			if not Zombie.FiringRange.Value then
+				local p = findNearestPlayer(Zombie)
+				if p and p.Character and humanoid.Health > 0 then 
+					walkTo(p.Character,3,ZombieHumanoid) --Now the current zombie in the for loop has been ordered to move to the nearest player to this specific zombie
+					if p.Character then
+						for i,v in pairs(p.Character:GetChildren()) do
+							local dis = distance(v,script.Parent)
+							if script.Parent and v:IsA("Part") and dis and dis < 5 and ZombieHumanoid.Health > 0 then --If any body part of the player is near enough, take damage and discontinue loop
+								p.Character.Humanoid:TakeDamage(damage)
+								break
+							end
+						end
+					end
+				end
+			else
+				--Firing range zombie AI script (For Zombie Zone)
+				wait(math.random(0,4))
+				local tars = getRandomChild(workspace.ZombieSpawns)
+				while distance(tars,ZombieHRT) > 6 do
+					walkTo(tars,0)
+					if checkDes(Zombie) then break end
+					wait(.33)
+				end
+			end
+			if checkDes(Zombie) or ZombieHumanoid.Health <= 0 then ZombieRespawn(true) end
+		end)()
+	end
+	
+	wait(.33)
+end
+--]]
